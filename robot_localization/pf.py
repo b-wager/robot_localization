@@ -291,8 +291,16 @@ class ParticleFilter(Node):
             r: the distance readings to obstacles
             theta: the angle relative to the robot frame for each corresponding reading 
         """
-        # TODO: implement this
-        pass
+        # get distance and vector to closest obstacle for robot:
+        robo_min_dist = r.min()
+
+        #for each particle, calculate it's weight:
+        for particle in self.particle_cloud:
+            particle_min_dist = self.OccupancyField.get_closest_obstacle_distance(particle.x, particle.y)
+            particle_weight = 1/((robo_min_dist-particle_min_dist)^2)
+            particle.w = particle_weight
+        
+        self.normalize_particles()
 
     def update_initial_pose(self, msg):
         """ Callback function to handle re-initializing the particle filter based on a pose estimate.
