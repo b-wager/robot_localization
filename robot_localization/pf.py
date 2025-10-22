@@ -69,8 +69,7 @@ class ParticleFilter(Node):
         angular_noise: the angular noise to add to each particle during a motion update
         resampling_threshold: the minimum normalized weight for a particle to be considered for
             resampling (should be between 0 and 1)
-        random_particles_fraction: the percentage of particles to sample completely randomly during
-            resampling (should be between 0 and 1)
+        n_random_particles: the number of particles to sample completely randomly during resampling
 
         pose_listener: a subscriber that listens for new approximate pose estimates
             (i.e. generated through the rviz GUI)
@@ -100,11 +99,12 @@ class ParticleFilter(Node):
         self.d_thresh = 0.2             # the amount of linear movement before performing an update
         self.a_thresh = math.pi/6       # the amount of angular movement before performing an update
 
-        self.linear_noise = 0.02    # the linear noise to add to each particle during motion update
-        self.angular_noise = 0.005   # the angular noise to add to each particle during motion update
+        self.linear_noise = 0.05    # the linear noise to add to each particle during motion update
+        self.angular_noise = 0.01   # the angular noise to add to each particle during motion update
 
         self.resampling_threshold = 0.01  # the threshold (between 0 and 1) for resampling a particle
-        self.random_particles_fraction = 0.01  # the fraction of particles to randomly reinitialize
+        random_particles_fraction = 0.3  # the fraction of particles to randomly reinitialize
+        self.n_random_particles = int(self.n_particles * random_particles_fraction)
 
         self.odom_pose = None          # the most recent odometry pose of the robot
         self.robot_pose = None         # the most recent estimate of the robot's pose
@@ -227,11 +227,16 @@ class ParticleFilter(Node):
         # self.robot_pose = best_particle.as_pose()
 
         # calculate the mean
-        weights = np.array([p.w for p in self.particle_cloud])
-        mean_x = np.average(np.array([p.x for p in self.particle_cloud]), weights=weights)
-        mean_y = np.average(np.array([p.y for p in self.particle_cloud]), weights=weights)
-        mean_theta = np.average(np.array([p.theta for p in self.particle_cloud]), weights=weights)
-        q = quaternion_from_euler(0, 0, mean_theta)
+        non_random_particles = self.particle_cloud[:self.n_particles - self.n_random_particles]
+        weights = np.array([p.w for p in non_random_particles])
+        mean_x = np.average(np.array([p.x for p in non_random_particles]), weights=weights)
+        mean_y = np.average(np.array([p.y for p in non_random_particles]), weights=weights)
+        angles = np.array([p.theta for p in non_random_particles])
+        # sin_theta = np.average(np.sin(angles), weights=weights)
+        # cos_theta = np.average(np.cos(angles), weights=weights)
+        # mean_theta = np.arctan2(sin_theta, cos_theta) % (2 * math.pi)
+        # print(np.degrees(mean_theta))
+        q = quaternion_from_euler(0, 0, np.average(angles, weights=weights))
         self.robot_pose = Pose(position=Point(x=mean_x, y=mean_y, z=0.0),
                     orientation=Quaternion(x=q[0], y=q[1], z=q[2], w=q[3]))
 
@@ -253,7 +258,7 @@ class ParticleFilter(Node):
         if self.current_odom_xy_theta:
             delta = (new_odom_xy_theta[0] - self.current_odom_xy_theta[0],
                      new_odom_xy_theta[1] - self.current_odom_xy_theta[1],
-                     new_odom_xy_theta[2] - self.current_odom_xy_theta[2])
+                     (new_odom_xy_theta[2] - self.current_odom_xy_theta[2]) % (2 * math.pi))
 
             self.current_odom_xy_theta = new_odom_xy_theta
         else:
@@ -282,8 +287,7 @@ class ParticleFilter(Node):
         probabilities = [p.w for p in self.particle_cloud]
         #print(f"choices: {len(self.particle_cloud)}, probabilities: {len(probabilities)}")
 
-        num_random_particles = int(self.random_particles_fraction * self.n_particles)
-        inds = np.random.choice(len(self.particle_cloud), size=self.n_particles-num_random_particles, p=probabilities)
+        inds = np.random.choice(len(self.particle_cloud), size=self.n_particles-self.n_random_particles, p=probabilities)
         samples = [deepcopy(self.particle_cloud[int(i)]) for i in inds]
         # add noise to each particle
         for p in samples:
@@ -291,7 +295,7 @@ class ParticleFilter(Node):
             p.x = pos[0]
             p.y = pos[1]
             p.theta = pos[2]
-        for _ in range(num_random_particles):
+        for _ in range(self.n_random_particles):
             samples.append(self.create_random_particle(self.current_odom_xy_theta))
         #print(len(samples))
         self.particle_cloud = samples
@@ -359,9 +363,8 @@ class ParticleFilter(Node):
         x = np.random.normal(loc=xy_theta[0])
         y = np.random.normal(loc=xy_theta[1])
         # make sure we don't initialize particles in obstacles or outside the map
-        while (self.occupancy_field.get_closest_obstacle_distance(x, y) == 0.0 or
-                x < 0 or x > self.occupancy_field.map.info.width or
-                y < 0 or y > self.occupancy_field.map.info.height):
+        while (np.isnan(self.occupancy_field.get_closest_obstacle_distance(x, y)) or
+               self.occupancy_field.get_closest_obstacle_distance(x, y) == 0.0):
             x = np.random.normal(loc=xy_theta[0])
             y = np.random.normal(loc=xy_theta[1])
         theta = np.random.normal(loc=xy_theta[2]) % (2*math.pi)
