@@ -16,9 +16,13 @@ Initially, we had planned to compare not only the shortest distance to an obstac
 
 The weight of each particle is determined by:
 
+![](https://github.com/b-wager/robot_localization/blob/main/images/Screenshot%20from%202025-10-22%2020-57-43.png)
+
 Particle weights are then normalized so they sum to 1. Particles with higher weights are more likely to live on when we resample all our particles.
 ### Update Particle Positions
 Each time the robot moves, particle positions are updated to match that movement relative to the initial heading of the particle. Noise on a gaussian distribution is added to both the x, y, and theta transformation of particles to more accurately capture the uncertainty in the robot’s odometry measurements. By updating our particles with the robot’s movement, we can continue resampling particles with a high confidence weight, and re-weigh them as the robot’s position changes.
+
+![](https://github.com/b-wager/robot_localization/blob/main/images/Movement_update.png)
 
 The figure above represents how a movement update from the robot (blue) causes a movement update in a particle (red). The particle follows the same transformation as the robot, with the linear and angular movement relative to the particle’s initial heading. This means that particles with different theta values than the robot will move in a different direction than the robot in the global frame, allowing these particles with inaccurate thetas to be filtered out when the map data starts to differ from the laser data.
 
@@ -44,9 +48,12 @@ Our biggest gripe with our final particle filter is that the position estimation
 
 While we are happy with the results of our particle filter using only shortest distance to an obstacle to determine particle weight, we would like to see how much of a difference including bearing in the particle weight calculation would make. It would be interesting to see how this change could affect the accuracy of the algorithm, and to play around with how to balance the comparisons of linear distance lidar angle in our particle weight equation. We would try something like the equation below, where  and  are parameters to adjust the weight of the linear distance and angle. 
 
+![](https://github.com/b-wager/robot_localization/blob/main/images/Screenshot%20from%202025-10-22%2020-58-09.png)
+
 ## Lessons Learned
 This assignment gave us an opportunity to write code to add to an existing, unfinished program. We were able to add missing pieces, and reconfigure or delete parts of the existing code to fit our needs. This presented an exciting challenge, as we needed to really understand what we were working with to avoid errors and wasted time spent re-doing existing work. We learned to be careful with our assumptions about data types and the input and output of functions. Our mistake of not subscribing to the map really drove this lesson home for us. This lesson prepares us for future collaborations where we may join in ongoing work with existing code, and even personal projects where we might use existing code from open sources to build our own work off of.
 We also learned an appreciation of the power of simple computations repeated to achieve a complex goal. We found this particle filter to be quite a challenge, but the computation to weigh particles is very simple. We only use one metric to compare between the actual robot and each particle. Given this, we were impressed to see our particle filter run as well as it did, though it is certainly not flawless.
 
+![](https://github.com/b-wager/robot_localization/blob/main/images/demo.gif)
 
 The above video is an example of our particle filter working. What is interesting is that it is able to very quickly converge and is in a fairly accurate position until it reaches the big nook, in which case some of the particles diverge and two main clusters appear instead of 1. However, when the robot is relatively close to a wall again, the particle filter re-converges and returns to a fairly accurate position.
